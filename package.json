@@ -1,0 +1,16 @@
+{
+  "name": "unslop",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Strips AI slop from anything you read or write. Every judgment is made by Jev; no LLM runs anywhere.",
+  "workspaces": ["server", "web"],
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "dev": "npm run dev --workspaces --if-present",
+    "dev:server": "npm run dev -w server",
+    "dev:web": "npm run dev -w web",
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test -w server"
+  }
+}
