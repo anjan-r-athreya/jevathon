@@ -18,10 +18,23 @@ export function DecisionPanel({
   onHover: (unitId: string | null) => void;
   hovered: string | null;
 }) {
-  const endRef = useRef<HTMLDivElement>(null);
+  const rowsRef = useRef<HTMLDivElement>(null);
+  const pinned = useRef(true);
+
+  // Follow the feed while the reader is at the bottom. The moment they scroll
+  // up to read something, stop yanking it away from them — and only the
+  // panel scrolls, never the page around it.
   useEffect(() => {
-    endRef.current?.scrollIntoView({ block: "end" });
+    const el = rowsRef.current;
+    if (!el || !pinned.current) return;
+    el.scrollTop = el.scrollHeight;
   }, [judgments.length]);
+
+  const onScroll = () => {
+    const el = rowsRef.current;
+    if (!el) return;
+    pinned.current = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+  };
 
   return (
     <div className="panel">
@@ -29,7 +42,10 @@ export function DecisionPanel({
         <span>Jev decisions</span>
         <span className="muted">{judgments.length}</span>
       </div>
-      <div className="panel-rows">
+      <div className="panel-rows" ref={rowsRef} onScroll={onScroll}>
+        {judgments.length === 0 ? (
+          <p className="hint">Every question Jev answers lands here: unit, question, answer, confidence, and how long it took. Amber means Jev wasn't sure.</p>
+        ) : null}
         {judgments.map((j, i) => {
           const unsure = (j.confidence ?? 1) < LOW_CONFIDENCE;
           return (
@@ -47,8 +63,12 @@ export function DecisionPanel({
             >
               <span className="row-stage">{j.stage}</span>
               <span className="row-unit">{j.unitId ?? "page"}</span>
-              <span className="row-q">{j.question}</span>
-              <span className="row-a">{describeJudgment(j)}</span>
+              <span className="row-q" title={j.question}>
+                {j.question}
+              </span>
+              <span className="row-a" title={String(j.answer)}>
+                {describeJudgment(j)}
+              </span>
               <span className="row-conf">
                 {j.confidence === undefined ? "" : `${Math.round(j.confidence * 100)}%`}
               </span>
@@ -56,7 +76,6 @@ export function DecisionPanel({
             </div>
           );
         })}
-        <div ref={endRef} />
       </div>
     </div>
   );

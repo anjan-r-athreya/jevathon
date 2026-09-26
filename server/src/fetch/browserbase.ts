@@ -3,7 +3,8 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Block, Source, Unit } from "../types.js";
 import { pageCacheDir, shotCacheDir } from "../paths.js";
-import { extractArticle } from "./extract.js";
+import { extractArticle, findMissingArticle } from "./extract.js";
+import { countWords } from "../segment.js";
 
 type Fetched = { html: string; screenshot?: Buffer; live: boolean };
 
@@ -83,7 +84,11 @@ export async function fetchPage(
     if (!fetched) throw liveError ?? new Error(`Could not load ${normalized}`);
   }
 
-  const { title, blocks, units } = extractArticle(fetched.html, normalized);
+  const extracted = extractArticle(fetched.html, normalized);
+  const missing = findMissingArticle(extracted, countWords);
+  if (missing) throw new Error(missing);
+
+  const { title, blocks, units } = extracted;
   const source: Source = { title, url: normalized, live: fetched.live };
   const shot = await shotUrl(normalized);
   if (shot) source.screenshotUrl = shot;
@@ -135,7 +140,12 @@ async function loadLive(url: string): Promise<Fetched> {
   try {
     const context = browser.contexts()[0]!;
     const page = context.pages()[0] ?? (await context.newPage());
-    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30_000 });
+    const response = await page.goto(url, {
+      waitUntil: "domcontentloaded",
+      timeout: 30_000,
+    });
+    const status = response?.status() ?? 0;
+    if (status >= 400) throw new Error(`${url} returned ${status}.`);
 
     // Bot checks answer 200 with an interstitial and swap in the real page a
     // few seconds later. Waiting for that is the difference between reading

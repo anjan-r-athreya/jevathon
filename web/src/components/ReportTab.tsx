@@ -7,7 +7,15 @@ import { label } from "../model.js";
  */
 export function ReportTab({ run }: { run: RunState }) {
   const report = run.done?.report;
-  if (!report) return <p className="muted pad">The report appears once the run finishes.</p>;
+  if (!report) {
+    return (
+      <div className="col-body">
+        <p className="hint">
+          {run.status === "running" ? "The report appears when the run finishes." : "Run something to get a report."}
+        </p>
+      </div>
+    );
+  }
 
   const counts = Object.entries(report.fillerCounts).sort((a, b) => b[1] - a[1]);
   return (
@@ -19,7 +27,7 @@ export function ReportTab({ run }: { run: RunState }) {
         </p>
       ) : null}
 
-      <h3>Filler types</h3>
+      <h3>{run.mode === "list" ? "Item types" : "Filler types"}</h3>
       <ul className="counts">
         {counts.map(([key, n]) => (
           <li key={key}>
@@ -29,7 +37,7 @@ export function ReportTab({ run }: { run: RunState }) {
         ))}
       </ul>
 
-      <h3>Cuts ({report.cuts.length})</h3>
+      <h3>{run.mode === "list" ? "Collapsed" : "Cuts"} ({report.cuts.length})</h3>
       {report.cuts.length === 0 ? (
         <p className="muted">Nothing was cut.</p>
       ) : (
@@ -37,7 +45,10 @@ export function ReportTab({ run }: { run: RunState }) {
           {report.cuts.map((cut) => (
             <li key={cut.unitId}>
               <div className="cut-text">{cut.text}</div>
-              <div className="muted">{label(cut.reason)}</div>
+              <div className="muted">
+                {cut.reason}
+                {cut.fillerType && cut.fillerType !== "substantive" ? ` · ${label(cut.fillerType)}` : ""}
+              </div>
             </li>
           ))}
         </ul>
@@ -49,7 +60,7 @@ export function ReportTab({ run }: { run: RunState }) {
           <ul className="cuts">
             {report.flags.map((flag, i) => (
               <li key={`${flag.unitId}-${i}`}>
-                <div className="cut-text">{flag.text}</div>
+                <div className="flag-text">{flag.text}</div>
                 <div className="muted">{flag.reason}</div>
               </li>
             ))}
@@ -77,8 +88,8 @@ export function ReportTab({ run }: { run: RunState }) {
         <>
           <h3>Reverted by the edit check</h3>
           <p className="muted">
-            {report.revertedParagraphs.join(", ")} — the cuts came back as flags because a fact
-            would have gone with them.
+            {report.revertedParagraphs.join(", ")} — the cuts came back as flags because something the
+            reader needed would have gone with them.
           </p>
         </>
       ) : null}

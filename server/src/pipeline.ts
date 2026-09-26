@@ -177,6 +177,10 @@ async function runWriting(
 ): Promise<void> {
   const wordsIn = countWords(units.map((u) => u.text).join(" "));
   const prose = blocks.filter((b) => b.kind === "prose" && b.units.length > 0);
+  // What Unslop is allowed to touch. A recipe page is mostly protected
+  // ingredients and steps, so the share cut of the whole page says little.
+  const proseWordsIn = countWords(prose.map((b) => b.text).join(" "));
+  const protectedWords = wordsIn - proseWordsIn;
   const edits: Edit[] = [];
   const pushEdit = (edit: Edit) => {
     edits.push(edit);
@@ -374,13 +378,28 @@ async function runWriting(
     event: "done",
     data: {
       output,
-      stats: jev.stats(wordsIn, countWords(output), Date.now() - startedAt),
+      stats: jev.stats(
+        {
+          wordsIn,
+          wordsOut: countWords(output),
+          proseWordsIn,
+          proseWordsOut: countWords(
+            prose
+              .flatMap((b) => b.units.filter((u) => !deleted.has(u.id)))
+              .map((u) => renderUnit(u, signals.get(u.id)))
+              .join(" "),
+          ),
+          protectedWords,
+        },
+        Date.now() - startedAt,
+      ),
       report: buildReport({
         genre: genre.choice,
         padding: padding.score,
         signals,
         units,
         deleted,
+        reasons: cutReasons(edits),
         flagged,
         reverted,
       }),
@@ -467,7 +486,16 @@ async function runList(
     event: "done",
     data: {
       output,
-      stats: jev.stats(wordsIn, countWords(output), Date.now() - startedAt),
+      stats: jev.stats(
+        {
+          wordsIn,
+          wordsOut: countWords(output),
+          proseWordsIn: wordsIn,
+          proseWordsOut: countWords(output),
+          protectedWords: 0,
+        },
+        Date.now() - startedAt,
+      ),
       report: {
         fillerCounts,
         cuts: collapsed.map((id) => ({
@@ -590,6 +618,8 @@ function buildReport(input: {
   signals: Map<string, SentenceSignals>;
   units: Unit[];
   deleted: Set<string>;
+  /** The planner's reason for each cut, keyed by unit. */
+  reasons: Map<string, string>;
   flagged: Edit[];
   reverted: string[];
 }): Report {
@@ -615,7 +645,8 @@ function buildReport(input: {
     cuts: [...input.deleted].map((id) => ({
       unitId: id,
       text: textOf(id),
-      reason: input.signals.get(id)?.fillerType ?? REASONS.noNewInfo,
+      reason: input.reasons.get(id) ?? REASONS.noNewInfo,
+      fillerType: input.signals.get(id)?.fillerType ?? "substantive",
     })),
     flags: input.flagged.flatMap((e) =>
       e.unitIds.map((id) => ({
@@ -627,6 +658,21 @@ function buildReport(input: {
     swaps,
     revertedParagraphs: input.reverted,
   };
+}
+
+/** Why each unit was cut, from the edits in the order they landed. */
+function cutReasons(edits: Edit[]): Map<string, string> {
+  const reasons = new Map<string, string>();
+  for (const edit of edits) {
+    if (edit.kind === "delete") {
+      for (const id of edit.unitIds) reasons.set(id, edit.reason);
+    } else if (edit.kind === "keep_best") {
+      for (const id of edit.unitIds) {
+        if (id !== edit.replacement) reasons.set(id, edit.reason);
+      }
+    }
+  }
+  return reasons;
 }
 
 function describe(err: unknown): string {

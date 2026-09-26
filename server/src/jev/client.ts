@@ -119,10 +119,19 @@ export class Jev {
     });
   }
 
-  stats(wordsIn: number, wordsOut: number, wallMs: number): Stats {
+  stats(
+    counts: Pick<
+      Stats,
+      | "wordsIn"
+      | "wordsOut"
+      | "proseWordsIn"
+      | "proseWordsOut"
+      | "protectedWords"
+    >,
+    wallMs: number,
+  ): Stats {
     return {
-      wordsIn,
-      wordsOut,
+      ...counts,
       judgments: this.judgmentCount,
       requests: this.requests,
       totalMs: wallMs,

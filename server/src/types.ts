@@ -30,8 +30,17 @@ export type Edit = {
 };
 
 export type Stats = {
+  /** Every word on the page or in the draft, protected blocks included. */
   wordsIn: number;
   wordsOut: number;
+  /**
+   * Words Unslop was actually allowed to judge. On a recipe page most of the
+   * words are the protected ingredients and steps, so the share cut of the
+   * whole page badly understates what happened to the prose.
+   */
+  proseWordsIn: number;
+  proseWordsOut: number;
+  protectedWords: number;
   judgments: number;
   requests: number;
   totalMs: number;
@@ -65,7 +74,12 @@ export type Report = {
   padding?: number;
   paddingLabel?: string;
   fillerCounts: Record<string, number>;
-  cuts: Array<{ unitId: string; text: string; reason: string }>;
+  cuts: Array<{
+    unitId: string;
+    text: string;
+    reason: string;
+    fillerType?: string;
+  }>;
   flags: Array<{ unitId: string; text: string; reason: string }>;
   swaps: Array<{ unitId: string; from: string; to: string }>;
   revertedParagraphs: string[];

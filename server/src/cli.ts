@@ -67,8 +67,15 @@ await runUnslop(
           console.log(
             `reverted: ${e.data.report.revertedParagraphs.join(", ")}`,
           );
+        const proseCut = Math.round(
+          (1 - s.proseWordsOut / s.proseWordsIn) * 100,
+        );
+        const pageCut = Math.round((1 - s.wordsOut / s.wordsIn) * 100);
         console.log(
-          `\n${s.wordsIn} -> ${s.wordsOut} words (${Math.round((1 - s.wordsOut / s.wordsIn) * 100)}% cut) · ` +
+          `\n${s.proseWordsIn} -> ${s.proseWordsOut} prose words (${proseCut}% cut)` +
+            (s.protectedWords > 0
+              ? `, ${s.protectedWords} protected, ${pageCut}% of the page\n`
+              : "\n") +
             `${s.judgments} judgments · ${s.requests} requests · ${s.totalMs}ms · ` +
             `${s.inputTokens} tokens · $${s.costUsd.toFixed(5)}`,
         );

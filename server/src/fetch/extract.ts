@@ -95,7 +95,7 @@ export function extractArticle(html: string, url: string): Extracted {
       const text = clean(child.textContent ?? "");
       if (text.length === 0) continue;
       if (PROTECTED_TAGS.has(tag)) {
-        addProtected(text, child.outerHTML);
+        addProtected(text, sanitize(child));
       } else if (tag === "P") {
         addProse(text);
       } else if (CONTAINER_TAGS.has(tag)) {
@@ -145,4 +145,114 @@ function escapeHtml(s: string): string {
     /[&<>"]/g,
     (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!,
   );
+}
+
+/**
+ * Tags a protected block may keep. Everything else is unwrapped to its text,
+ * and every attribute goes — the UI renders this markup directly, so nothing
+ * from the page (scripts, handlers, tracking pixels, links) may survive.
+ */
+const KEEP_TAGS = new Set([
+  "UL",
+  "OL",
+  "LI",
+  "DL",
+  "DT",
+  "DD",
+  "TABLE",
+  "THEAD",
+  "TBODY",
+  "TFOOT",
+  "TR",
+  "TH",
+  "TD",
+  "CAPTION",
+  "PRE",
+  "CODE",
+  "BLOCKQUOTE",
+  "P",
+  "BR",
+  "HR",
+  "H1",
+  "H2",
+  "H3",
+  "H4",
+  "H5",
+  "H6",
+  "STRONG",
+  "EM",
+  "B",
+  "I",
+  "FIGCAPTION",
+]);
+const DROP_TAGS = new Set([
+  "SCRIPT",
+  "STYLE",
+  "IFRAME",
+  "NOSCRIPT",
+  "SVG",
+  "IMG",
+  "VIDEO",
+  "BUTTON",
+  "FORM",
+  "INPUT",
+]);
+
+/** Structure only: a recipe's list stays a list, and nothing else comes along. */
+function sanitize(root: Element): string {
+  const doc = root.ownerDocument;
+  const walk = (node: Element): Node | null => {
+    const tag = node.tagName.toUpperCase();
+    if (DROP_TAGS.has(tag)) return null;
+    const children: Node[] = [];
+    for (const child of Array.from(node.childNodes)) {
+      if (child.nodeType === 3) {
+        children.push(doc.createTextNode(child.textContent ?? ""));
+      } else if (child.nodeType === 1) {
+        const kept = walk(child as Element);
+        if (kept) children.push(kept);
+      }
+    }
+    if (!KEEP_TAGS.has(tag)) {
+      // Unwrap: hand the children up in a fragment.
+      const frag = doc.createDocumentFragment();
+      for (const c of children) frag.appendChild(c);
+      return frag;
+    }
+    const el = doc.createElement(tag.toLowerCase());
+    for (const c of children) el.appendChild(c);
+    return el;
+  };
+  const out = walk(root);
+  if (!out) return "";
+  const holder = doc.createElement("div");
+  holder.appendChild(out);
+  return holder.innerHTML;
+}
+
+/**
+ * Pages with nothing to unslop. A mistyped URL is the likeliest thing to go
+ * wrong in front of an audience, and without this the pipeline runs happily
+ * over a 404 and presents its navigation menu as a reader view.
+ */
+const NO_ARTICLE_TITLE =
+  /\b(404|page not found|not found|error 404|no longer exists|access denied|forbidden)\b/i;
+
+/** Below this many words of prose there is nothing worth judging. */
+const MIN_PROSE_WORDS = 60;
+
+export function findMissingArticle(
+  extracted: Extracted,
+  countWords: (text: string) => number,
+): string | undefined {
+  if (NO_ARTICLE_TITLE.test(extracted.title)) {
+    return `That page is an error page, not an article ("${extracted.title.trim()}").`;
+  }
+  const prose = extracted.blocks
+    .filter((b) => b.kind === "prose")
+    .reduce((n, b) => n + countWords(b.text), 0);
+  if (prose < MIN_PROSE_WORDS) {
+    return "That page has no article on it — Unslop found nothing but navigation and boilerplate.";
+  }
+  return undefined;
 }

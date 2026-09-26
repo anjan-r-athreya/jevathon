@@ -160,6 +160,13 @@ export function currentOutput(run: RunState, views: Map<string, UnitView>): stri
   return out.join("\n\n");
 }
 
+/** Words Unslop may judge: sentence and item units, never protected ones. */
+export function proseWordsIn(run: RunState): number {
+  return run.units
+    .filter((u) => u.kind !== "protected")
+    .reduce((n, u) => n + wordCount(u.text), 0);
+}
+
 export function wordCount(text: string): number {
   return text.split(/\s+/).filter((w) => /\w/.test(w)).length;
 }

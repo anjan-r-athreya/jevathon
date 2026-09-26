@@ -5,14 +5,21 @@ import { Counters } from "./components/Counters.js";
 import { OriginalColumn, ResultColumn } from "./components/Columns.js";
 import { DecisionPanel } from "./components/DecisionPanel.js";
 import { ReportTab } from "./components/ReportTab.js";
-import { buildViews, currentOutput, emptyRun, wordCount, type RunState } from "./model.js";
+import {
+  buildViews,
+  currentOutput,
+  emptyRun,
+  proseWordsIn,
+  wordCount,
+  type RunState,
+} from "./model.js";
 
 const MODES: Array<Mode | "auto"> = ["auto", "web", "writing", "list"];
 const MODE_LABEL: Record<string, string> = {
   auto: "auto",
-  web: "web mode",
-  writing: "writing mode",
-  list: "list mode",
+  web: "web",
+  writing: "writing",
+  list: "list",
 };
 
 export function App() {
@@ -20,51 +27,67 @@ export function App() {
   const [override, setOverride] = useState<Mode | "auto">("auto");
   const [run, setRun] = useState<RunState>(emptyRun);
   const [tab, setTab] = useState<"result" | "report">("result");
-  const [showDiff, setShowDiff] = useState(false);
+  // Struck-through cuts are the default view: they are what makes a cut
+  // restorable, and what the audience watches fade. The toggle hides them.
+  const [showCuts, setShowCuts] = useState(true);
   const [hovered, setHovered] = useState<string | null>(null);
   const [demos, setDemos] = useState<Demo[]>([]);
+  const [startedAt, setStartedAt] = useState<number | null>(null);
   const abort = useRef<AbortController | null>(null);
 
   useEffect(() => {
     void loadDemos().then(setDemos);
   }, []);
 
-  const start = useCallback(
-    async (text: string, mode: Mode | "auto", demo: boolean) => {
-      abort.current?.abort();
-      const controller = new AbortController();
-      abort.current = controller;
-      setTab("result");
-      setRun({ ...emptyRun, status: "running", restored: new Set() });
+  const start = useCallback(async (text: string, mode: Mode | "auto", demo: boolean) => {
+    if (!text.trim()) return;
+    abort.current?.abort();
+    const controller = new AbortController();
+    abort.current = controller;
+    setTab("result");
+    setStartedAt(Date.now());
+    setRun({ ...emptyRun, status: "running", restored: new Set() });
 
-      await unslop(
-        { input: text, mode, demo },
-        {
-          onMode: (m, confidence) =>
-            setRun((r) => ({ ...r, mode: m, modeConfidence: confidence })),
-          onSource: (source) => setRun((r) => ({ ...r, source })),
-          onUnits: (units, blocks) => setRun((r) => ({ ...r, units, blocks })),
-          onJudgment: (j) => setRun((r) => ({ ...r, judgments: [...r.judgments, j] })),
-          onEdit: (e) => setRun((r) => ({ ...r, edits: [...r.edits, e] })),
-          onDone: (done) => setRun((r) => ({ ...r, done, status: "done" })),
-          onError: (message) => setRun((r) => ({ ...r, error: message, status: "error" })),
-        },
-        controller.signal,
-      ).catch((err: unknown) => {
-        if (controller.signal.aborted) return;
-        setRun((r) => ({ ...r, status: "error", error: String(err) }));
-      });
-    },
-    [],
-  );
+    await unslop(
+      { input: text, mode, demo },
+      {
+        onMode: (m, confidence) => setRun((r) => ({ ...r, mode: m, modeConfidence: confidence })),
+        onSource: (source) => setRun((r) => ({ ...r, source })),
+        onUnits: (units, blocks) => setRun((r) => ({ ...r, units, blocks })),
+        onJudgment: (j) => setRun((r) => ({ ...r, judgments: [...r.judgments, j] })),
+        onEdit: (e) => setRun((r) => ({ ...r, edits: [...r.edits, e] })),
+        onDone: (done) => setRun((r) => ({ ...r, done, status: "done" })),
+        onError: (message) => setRun((r) => ({ ...r, error: message, status: "error" })),
+      },
+      controller.signal,
+    ).catch((err: unknown) => {
+      if (controller.signal.aborted) return;
+      setRun((r) => ({ ...r, status: "error", error: String(err) }));
+    });
+  }, []);
 
   const views = useMemo(() => buildViews(run), [run]);
   const output = useMemo(() => currentOutput(run, views), [run, views]);
-  const wordsOut = run.status === "idle" ? 0 : wordCount(output);
+  const live = useMemo(
+    () => ({
+      proseWordsIn: proseWordsIn(run),
+      proseWordsOut: run.status === "idle" ? 0 : wordCount(output) - protectedWordsOf(run),
+      judgments: run.judgments.length,
+    }),
+    [run, output],
+  );
   const hover = { hovered, onHover: setHovered };
+  const running = run.status === "running";
 
   const restore = (unitId: string) =>
     setRun((r) => ({ ...r, restored: new Set(r.restored).add(unitId) }));
+
+  // Overriding the mode re-runs straight away when there is something to run
+  // on; a chip that only changed a setting would look broken on stage.
+  const chooseMode = (m: Mode | "auto") => {
+    setOverride(m);
+    if (input.trim() && !running) void start(input, m, false);
+  };
 
   return (
     <div className="app">
@@ -77,48 +100,51 @@ export function App() {
           className="input-row"
           onSubmit={(e) => {
             e.preventDefault();
-            if (input.trim()) void start(input, override, false);
+            void start(input, override, false);
           }}
         >
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            placeholder="Paste a URL, a draft, or a list"
-            rows={2}
+            placeholder="Paste a URL, a draft, or a list  (⌘↩ to run)"
+            rows={3}
             onKeyDown={(e) => {
               if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
                 e.preventDefault();
-                if (input.trim()) void start(input, override, false);
+                void start(input, override, false);
               }
             }}
           />
-          <button type="submit" disabled={run.status === "running" || !input.trim()}>
-            {run.status === "running" ? "Unslopping…" : "Unslop"}
+          <button type="submit" disabled={running || !input.trim()}>
+            {running ? "Unslopping…" : "Unslop"}
           </button>
         </form>
         <div className="controls">
-          <div className="modes">
-            {MODES.map((m) => (
-              <button
-                key={m}
-                type="button"
-                className={`chip ${modeIsActive(m, override, run.mode) ? "chip-on" : ""}`}
-                onClick={() => setOverride(m)}
-                title={m === "auto" ? "Let Jev decide" : `Force ${MODE_LABEL[m]}`}
-              >
-                {MODE_LABEL[m]}
-                {m === "auto" && run.mode && override === "auto"
-                  ? ` · ${run.mode} ${Math.round(run.modeConfidence * 100)}%`
-                  : ""}
-              </button>
-            ))}
+          <div className="modes" role="group" aria-label="Mode">
+            {MODES.map((m) => {
+              const active = override === "auto" ? m === "auto" : m === override;
+              const detected = override === "auto" && m !== "auto" && run.mode === m;
+              return (
+                <button
+                  key={m}
+                  type="button"
+                  className={`chip ${active ? "chip-on" : ""} ${detected ? "chip-detected" : ""}`}
+                  onClick={() => chooseMode(m)}
+                  title={m === "auto" ? "Let Jev decide" : `Force ${MODE_LABEL[m]} mode`}
+                >
+                  {MODE_LABEL[m]}
+                  {detected ? ` ${Math.round(run.modeConfidence * 100)}%` : ""}
+                </button>
+              );
+            })}
           </div>
-          <div className="demos">
+          <div className="demos" role="group" aria-label="Demo inputs">
             {demos.map((demo) => (
               <button
                 key={demo.id}
                 type="button"
                 className="chip chip-demo"
+                disabled={running}
                 onClick={() => {
                   setInput(demo.input);
                   setOverride("auto");
@@ -137,9 +163,8 @@ export function App() {
       <main className="columns">
         <section className="col">
           <div className="col-head">
-            <span>
+            <span className="col-title">
               Original
-              {/* Never let a replay pass for a live fetch. */}
               {run.source && run.source.live !== undefined ? (
                 <span className={`chip small ${run.source.live ? "" : "chip-replay"}`}>
                   {run.source.live ? "live" : "replay"}
@@ -158,38 +183,22 @@ export function App() {
         <section className="col">
           <div className="col-head">
             <div className="tabs">
-              <button
-                className={tab === "result" ? "tab tab-on" : "tab"}
-                onClick={() => setTab("result")}
-              >
+              <button className={tab === "result" ? "tab tab-on" : "tab"} onClick={() => setTab("result")}>
                 Result
               </button>
-              <button
-                className={tab === "report" ? "tab tab-on" : "tab"}
-                onClick={() => setTab("report")}
-              >
+              <button className={tab === "report" ? "tab tab-on" : "tab"} onClick={() => setTab("report")}>
                 Report
               </button>
             </div>
-            {tab === "result" && run.mode !== "list" ? (
+            {tab === "result" && run.mode !== "list" && run.status !== "idle" ? (
               <label className="diff-toggle">
-                <input
-                  type="checkbox"
-                  checked={showDiff}
-                  onChange={(e) => setShowDiff(e.target.checked)}
-                />
-                show cuts
+                <input type="checkbox" checked={!showCuts} onChange={(e) => setShowCuts(!e.target.checked)} />
+                clean view
               </label>
             ) : null}
           </div>
           {tab === "result" ? (
-            <ResultColumn
-              run={run}
-              views={views}
-              hover={hover}
-              showDiff={showDiff}
-              onRestore={restore}
-            />
+            <ResultColumn run={run} views={views} hover={hover} showCuts={showCuts} onRestore={restore} />
           ) : (
             <ReportTab run={run} />
           )}
@@ -201,17 +210,13 @@ export function App() {
       </main>
 
       <footer>
-        <Counters
-          stats={run.done?.stats ?? null}
-          wordsOut={wordsOut}
-          running={run.status === "running"}
-        />
+        <Counters stats={run.done?.stats ?? null} live={live} running={running} startedAt={startedAt} />
       </footer>
     </div>
   );
 }
 
-function modeIsActive(m: Mode | "auto", override: Mode | "auto", detected: Mode | null): boolean {
-  if (override !== "auto") return m === override;
-  return m === "auto" || m === detected;
+function protectedWordsOf(run: RunState): number {
+  if (run.done) return run.done.stats.protectedWords;
+  return run.units.filter((u) => u.kind === "protected").reduce((n, u) => n + wordCount(u.text), 0);
 }

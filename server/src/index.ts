@@ -60,10 +60,12 @@ app.post("/api/unslop", async (c) => {
       { input, mode: body.mode ?? "auto", demo: body.demo ?? false },
       {
         emit: (event) => {
-          void stream.writeSSE({
-            event: event.event,
-            data: JSON.stringify(event.data),
-          });
+          // A client that navigated away mid-run closes the stream; the
+          // pipeline keeps emitting for a moment and that must be harmless.
+          if (controller.signal.aborted) return;
+          stream
+            .writeSSE({ event: event.event, data: JSON.stringify(event.data) })
+            .catch(() => {});
         },
         signal: controller.signal,
         fetchPage,
