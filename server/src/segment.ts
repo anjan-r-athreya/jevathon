@@ -32,13 +32,32 @@ function isProtectedChunk(chunk: string): boolean {
   return false;
 }
 
+/**
+ * Split into sentences, folding fragments back into the sentence before them.
+ *
+ * Real pages leave debris the segmenter treats as sentences of its own —
+ * a stray footnote marker, a lone bracket, half a citation. A fragment is
+ * anything with fewer than two words that does not start like a sentence;
+ * merging rather than dropping means no text is ever lost on the way in.
+ */
 export function splitSentences(text: string): string[] {
   const out: string[] = [];
   for (const seg of sentenceSegmenter.segment(text)) {
     const s = seg.segment.trim();
-    if (s.length > 0) out.push(s);
+    if (s.length === 0) continue;
+    if (isFragment(s) && out.length > 0) {
+      out[out.length - 1] = `${out[out.length - 1]} ${s}`;
+      continue;
+    }
+    out.push(s);
   }
   return out;
+}
+
+function isFragment(s: string): boolean {
+  if (countWords(s) >= 2) return false;
+  const first = s[0]!;
+  return !(first === first.toUpperCase() && first !== first.toLowerCase());
 }
 
 export function splitChunks(text: string): string[] {

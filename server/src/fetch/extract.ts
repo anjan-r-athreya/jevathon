@@ -92,7 +92,7 @@ export function extractArticle(html: string, url: string): Extracted {
   const walk = (node: Element) => {
     for (const child of Array.from(node.children)) {
       const tag = child.tagName.toUpperCase();
-      const text = (child.textContent ?? "").replace(/\s+/g, " ").trim();
+      const text = clean(child.textContent ?? "");
       if (text.length === 0) continue;
       if (PROTECTED_TAGS.has(tag)) {
         addProtected(text, child.outerHTML);
@@ -126,6 +126,18 @@ export function extractArticle(html: string, url: string): Extracted {
   }
 
   return { title, blocks, units };
+}
+
+/**
+ * Reference markers, edit links and "[citation needed]" are page furniture,
+ * not prose. Left in, the segmenter treats them as sentences of their own.
+ */
+function clean(text: string): string {
+  return text
+    .replace(/\[\s*(?:\d+|citation needed|edit|note \d+)\s*\]/gi, "")
+    .replace(/\s+/g, " ")
+    .replace(/\s+([,.;:!?])/g, "$1")
+    .trim();
 }
 
 function escapeHtml(s: string): string {
