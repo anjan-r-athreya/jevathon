@@ -100,7 +100,8 @@ every paragraph judged in parallel. Three rules from TypeSafe's docs shape it:
 | list | 1 per 20 items | `useful`, `item_type`, `generic`, `specific` |
 
 Sentences are referenced by path in the instructions — `` `sentences.s3` `` — so
-Jev knows exactly which one to judge.
+Jev knows exactly which one to judge. The full catalog, in the wording that
+ships, is in [QUESTIONS.md](QUESTIONS.md).
 
 ### Edit rules
 
