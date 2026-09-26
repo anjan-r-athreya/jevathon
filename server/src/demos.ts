@@ -1,8 +1,7 @@
 import { readFile, readdir } from "node:fs/promises";
-import path from "node:path";
+import { join } from "node:path";
+import { demoDir } from "./paths.js";
 import type { Mode } from "./types.js";
-
-const DEMO_DIR = path.resolve(process.cwd(), "data/demo");
 
 export type Demo = { id: string; label: string; mode: Mode; input: string };
 
@@ -12,13 +11,13 @@ export type Demo = { id: string; label: string; mode: Mode; input: string };
  */
 export async function loadDemos(): Promise<Demo[]> {
   try {
-    const files = (await readdir(DEMO_DIR))
+    const files = (await readdir(demoDir))
       .filter((f) => f.endsWith(".json"))
       .sort();
     const demos = await Promise.all(
       files.map(
         async (f) =>
-          JSON.parse(await readFile(path.join(DEMO_DIR, f), "utf8")) as Demo,
+          JSON.parse(await readFile(join(demoDir, f), "utf8")) as Demo,
       ),
     );
     return demos;

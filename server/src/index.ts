@@ -1,16 +1,17 @@
 import { readFile } from "node:fs/promises";
-import path from "node:path";
+import { join } from "node:path";
 import { serve } from "@hono/node-server";
 import { config } from "dotenv";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { streamSSE } from "hono/streaming";
-import { fetchPage, screenshotDir } from "./fetch/browserbase.js";
+import { fetchPage } from "./fetch/browserbase.js";
+import { envFile, shotCacheDir } from "./paths.js";
 import { runUnslop } from "./pipeline.js";
 import type { UnslopRequest } from "./types.js";
 import { loadDemos } from "./demos.js";
 
-config({ path: path.resolve(process.cwd(), ".env") });
+config({ path: envFile });
 
 const app = new Hono();
 app.use("*", cors());
@@ -32,7 +33,7 @@ app.get("/shots/:file", async (c) => {
   const file = c.req.param("file");
   if (!/^[a-f0-9]{16}\.png$/.test(file)) return c.notFound();
   try {
-    const png = await readFile(path.join(screenshotDir, file));
+    const png = await readFile(join(shotCacheDir, file));
     return c.body(png, 200, {
       "content-type": "image/png",
       "cache-control": "no-store",

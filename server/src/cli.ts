@@ -5,14 +5,14 @@
  *   npx tsx server/src/cli.ts path/to/draft.txt [--mode writing] [--verbose]
  */
 import { readFile } from "node:fs/promises";
-import path from "node:path";
 import { config } from "dotenv";
 import { fetchPage } from "./fetch/browserbase.js";
+import { envFile } from "./paths.js";
 import { runUnslop } from "./pipeline.js";
 import { THRESHOLDS } from "./config.js";
 import type { Judgment, Mode, UnslopEvent } from "./types.js";
 
-config({ path: path.resolve(process.cwd(), ".env") });
+config({ path: envFile });
 
 const args = process.argv.slice(2);
 const verbose = args.includes("--verbose");

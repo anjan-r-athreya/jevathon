@@ -1,11 +1,9 @@
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import path from "node:path";
+import { join } from "node:path";
 import type { Block, Source, Unit } from "../types.js";
+import { pageCacheDir, shotCacheDir } from "../paths.js";
 import { extractArticle } from "./extract.js";
-
-const CACHE_DIR = path.resolve(process.cwd(), "data/cache/pages");
-const SHOT_DIR = path.resolve(process.cwd(), "data/cache/shots");
 
 type Fetched = { html: string; screenshot?: Buffer; live: boolean };
 
@@ -88,21 +86,21 @@ async function loadLive(url: string): Promise<Fetched> {
 
 async function save(url: string, fetched: Fetched): Promise<void> {
   const key = keyFor(url);
-  await mkdir(CACHE_DIR, { recursive: true });
+  await mkdir(pageCacheDir, { recursive: true });
   await writeFile(
-    path.join(CACHE_DIR, `${key}.json`),
+    join(pageCacheDir, `${key}.json`),
     JSON.stringify({ url, html: fetched.html }),
   );
   if (fetched.screenshot) {
-    await mkdir(SHOT_DIR, { recursive: true });
-    await writeFile(path.join(SHOT_DIR, `${key}.png`), fetched.screenshot);
+    await mkdir(shotCacheDir, { recursive: true });
+    await writeFile(join(shotCacheDir, `${key}.png`), fetched.screenshot);
   }
 }
 
 async function loadCached(url: string): Promise<Fetched | undefined> {
   try {
     const raw = await readFile(
-      path.join(CACHE_DIR, `${keyFor(url)}.json`),
+      join(pageCacheDir, `${keyFor(url)}.json`),
       "utf8",
     );
     return { html: JSON.parse(raw).html as string, live: false };
@@ -114,11 +112,9 @@ async function loadCached(url: string): Promise<Fetched | undefined> {
 async function shotUrl(url: string): Promise<string | undefined> {
   const key = keyFor(url);
   try {
-    await readFile(path.join(SHOT_DIR, `${key}.png`));
+    await readFile(join(shotCacheDir, `${key}.png`));
     return `/shots/${key}.png`;
   } catch {
     return undefined;
   }
 }
-
-export const screenshotDir = SHOT_DIR;
