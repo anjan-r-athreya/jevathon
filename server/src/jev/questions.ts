@@ -130,7 +130,12 @@ export function paragraphQuestions(
       id,
       "adds_info",
       noul(
-        `Does ${s} state a fact, claim, example, step or detail that no other sentence here or in \`previous_paragraph\` already states?`,
+        `Does ${s} give the reader a specific fact, number, name, example, step or instruction that no other sentence here or in \`previous_paragraph\` already gives?`,
+        {
+          true: "It names something concrete the reader did not already have.",
+          false:
+            "It is setup, summary, hedging or a general observation that leaves the reader knowing nothing new.",
+        },
       ),
     );
     set.unit(
@@ -172,9 +177,11 @@ export function paragraphQuestions(
       set.unit(
         id,
         `swap_${hit.key}`,
-        noul(
-          `In ${s}, can "${hit.find}" be replaced with "${hit.replace}" without changing the meaning or breaking the grammar?`,
-        ),
+        hit.replace === ""
+          ? deletionSwapQuestion(id, hit.find)
+          : noul(
+              `In ${s}, can "${hit.find}" be replaced with "${hit.replace}" without changing the meaning or breaking the grammar?`,
+            ),
       );
     }
   });
