@@ -137,7 +137,15 @@ export function App() {
       <main className="columns">
         <section className="col">
           <div className="col-head">
-            <span>Original</span>
+            <span>
+              Original
+              {/* Never let a replay pass for a live fetch. */}
+              {run.source && run.source.live !== undefined ? (
+                <span className={`chip small ${run.source.live ? "" : "chip-replay"}`}>
+                  {run.source.live ? "live" : "replay"}
+                </span>
+              ) : null}
+            </span>
             {run.source?.url ? (
               <a className="muted" href={run.source.url} target="_blank" rel="noreferrer">
                 {run.source.title || run.source.url}

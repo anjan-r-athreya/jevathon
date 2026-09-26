@@ -14,3 +14,6 @@ data/cache/
 
 # os
 .DS_Store
+
+# local probe scripts
+server/scratch/

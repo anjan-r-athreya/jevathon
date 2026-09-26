@@ -44,6 +44,8 @@ export type Source = {
   title?: string;
   url?: string;
   screenshotUrl?: string;
+  /** False when the demo button replayed a cached fetch instead of loading live. */
+  live?: boolean;
 };
 
 /** A paragraph of prose, or a protected block (heading, list, table, code, quote). */

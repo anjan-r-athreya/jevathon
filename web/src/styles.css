@@ -246,3 +246,5 @@ footer { border-top: 1px solid var(--line); background: var(--panel); }
   .columns { grid-template-columns: 1fr; }
   .col { border-right: none; border-bottom: 1px solid var(--line); }
 }
+
+.chip-replay { background: #3a2f12; color: var(--amber); }
