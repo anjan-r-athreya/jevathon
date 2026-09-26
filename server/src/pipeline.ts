@@ -1,4 +1,9 @@
-import { LIST_BATCH_SIZE, FLAG_ONLY_GENRES, STATE_CHAR_CAP } from "./config.js";
+import {
+  LIST_BATCH_SIZE,
+  FLAG_ONLY_GENRES,
+  GOAL_DIRECTED_GENRES,
+  STATE_CHAR_CAP,
+} from "./config.js";
 import {
   Jev,
   readChoice,
@@ -194,11 +199,17 @@ async function runWriting(
   // Stage 2: one request per paragraph, all in parallel behind the gate.
   const phraseHits = hitsByUnit(units);
   const signals = new Map<string, SentenceSignals>();
+  // On a page the reader came to for something, ask whether each sentence is
+  // about the subject at all. The title goes into the state so the question
+  // has something concrete to point at.
+  const askOnTopic = GOAL_DIRECTED_GENRES.has(genre.choice);
+  const title = pageTitle(blocks);
   await Promise.all(
     prose.map(async (block, i) => {
       const sentences = block.units.filter((u) => u.kind === "sentence");
       if (sentences.length === 0) return;
       const state = {
+        title,
         previous_paragraph: prose[i - 1]?.text ?? "",
         sentences: Object.fromEntries(sentences.map((u) => [u.id, u.text])),
         next_paragraph: prose[i + 1]?.text ?? "",
@@ -206,6 +217,7 @@ async function runWriting(
       const set = paragraphQuestions(
         sentences,
         hitsForQuestions(sentences, phraseHits),
+        askOnTopic,
       );
       const { answers } = await jev.ask(2, state, set, signal);
       for (const unit of sentences) {
@@ -225,12 +237,12 @@ async function runWriting(
   for (const unit of units) {
     const sig = signals.get(unit.id);
     if (!sig || unit.kind === "protected") continue;
-    const verdict = verdictFor(sig, flagOnly);
+    const { verdict, reason } = verdictFor(sig, flagOnly);
     if (verdict === "delete") {
       deleted.add(unit.id);
-      pushEdit(makeEdit("delete", [unit.id], REASONS.noNewInfo));
+      pushEdit(makeEdit("delete", [unit.id], reason));
     } else if (verdict === "flag") {
-      const edit = makeEdit("flag", [unit.id], REASONS.unsure);
+      const edit = makeEdit("flag", [unit.id], reason);
       flagged.push(edit);
       pushEdit(edit);
     }
@@ -331,8 +343,8 @@ async function runWriting(
         .join(" ");
       const { answers } = await jev.ask(
         4,
-        { original: block.text, edited },
-        editCheckQuestions(),
+        { title, original: block.text, edited },
+        editCheckQuestions(askOnTopic),
         signal,
       );
       const lostInfo = readNoul(answers, "lost_info");
@@ -475,15 +487,21 @@ async function runList(
 /* Helpers                                                             */
 /* ------------------------------------------------------------------ */
 
+/** The page's own heading: the first protected block's first line. */
+function pageTitle(blocks: Block[]): string {
+  return (
+    blocks
+      .find((b) => b.kind === "protected")
+      ?.text.split("\n")[0]
+      ?.slice(0, 200) ?? ""
+  );
+}
+
 function pageGateState(blocks: Block[]): {
   title: string;
   paragraphs: Record<string, string>;
 } {
-  const title =
-    blocks
-      .find((b) => b.kind === "protected")
-      ?.text.split("\n")[0]
-      ?.slice(0, 200) ?? "";
+  const title = pageTitle(blocks);
   const paragraphs: Record<string, string> = {};
   let budget = STATE_CHAR_CAP;
   for (const block of blocks) {
@@ -541,6 +559,9 @@ function readSentenceSignals(
     specific: readNoul(answers, `${unitId}_specific`),
     loadBearing: readNoul(answers, `${unitId}_load_bearing`),
     repeatsPrev: repeats,
+    onTopic: answers[`${unitId}_on_topic`]
+      ? readNoul(answers, `${unitId}_on_topic`)
+      : undefined,
     swaps: hits.map((hit) => ({
       hit,
       approval: readNoul(answers, `${unitId}_swap_${hit.key}`),
@@ -558,6 +579,7 @@ function emptySignals(unitId: string): SentenceSignals {
     specific: 1,
     loadBearing: 1,
     repeatsPrev: undefined,
+    onTopic: undefined,
     swaps: [],
   };
 }

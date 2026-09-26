@@ -12,6 +12,7 @@ import type { Block, Edit, Unit } from "./types.js";
  */
 export const REASONS = {
   noNewInfo: "adds nothing the surrounding text does not already say",
+  offTopic: "about the writer rather than the subject the reader came for",
   intro: "setup before the first paragraph with real information",
   outro: "closing paragraph only restates earlier points",
   repeats: "repeats a point another sentence states more clearly",
@@ -32,33 +33,63 @@ export type SentenceSignals = {
   specific: number;
   loadBearing: number;
   repeatsPrev: number | undefined;
+  /** Asked only for goal-directed genres; undefined elsewhere. */
+  onTopic: number | undefined;
   /** Phrase hits with the yes-probability Jev gave each swap. */
   swaps: Array<{ hit: PhraseHit; approval: number }>;
 };
 
 export type Verdict = "keep" | "delete" | "flag";
+export type Ruling = { verdict: Verdict; reason: string };
 
 /**
- * The Stage 2 rule. All four conditions must agree before a sentence is cut;
- * a sentence Jev thinks adds little but does not clearly condemn is flagged.
+ * The Stage 2 rule, which is really two rules.
+ *
+ * **Filler.** All four signals must agree before a sentence is cut: it adds
+ * nothing, names nothing concrete, nothing after it depends on it, and Jev is
+ * confident it is not substantive.
+ *
+ * **Off topic.** On a page the reader came to for something, a sentence about
+ * the writer instead of the subject goes even when it is concrete. "I first
+ * published this recipe in 2013" clears every filler test — it states a fact,
+ * it names a date, Jev calls it substantive — and it is still not what the
+ * reader opened the page for. `load_bearing` still protects the flow.
+ *
+ * Anything short of either rule is flagged rather than cut.
  */
-export function verdictFor(sig: SentenceSignals, flagOnly: boolean): Verdict {
+export function verdictFor(sig: SentenceSignals, flagOnly: boolean): Ruling {
   const t = THRESHOLDS.delete;
-  const qualifies =
+  const cut = (reason: string): Ruling => ({
+    verdict: flagOnly ? "flag" : "delete",
+    reason,
+  });
+
+  const isFiller =
     sig.addsInfo < t.addsInfo &&
     sig.specific < t.specific &&
     sig.loadBearing < t.loadBearing &&
     sig.fillerType !== "substantive" &&
     sig.fillerConfidence >= t.fillerConfidence;
+  if (isFiller) return cut(REASONS.noNewInfo);
 
-  if (qualifies) return flagOnly ? "flag" : "delete";
-  if (sig.addsInfo < THRESHOLDS.flagAddsInfo) return "flag";
-  return "keep";
+  if (sig.onTopic !== undefined && sig.onTopic < t.offTopic) {
+    // Off topic, but the next sentence may still lean on it. Say so rather
+    // than cutting — otherwise a load-bearing aside would fall through to
+    // "keep" and the reader would never learn Jev doubted it.
+    return sig.loadBearing < t.loadBearing
+      ? cut(REASONS.offTopic)
+      : { verdict: "flag", reason: REASONS.offTopic };
+  }
+
+  if (sig.addsInfo < THRESHOLDS.flagAddsInfo) {
+    return { verdict: "flag", reason: REASONS.unsure };
+  }
+  return { verdict: "keep", reason: "" };
 }
 
-/** A sentence qualifies for deletion on the Stage 2 rule alone, ignoring genre. */
+/** A sentence qualifies for deletion on the Stage 2 rules alone, ignoring genre. */
 export function qualifiesForDeletion(sig: SentenceSignals): boolean {
-  return verdictFor(sig, false) === "delete";
+  return verdictFor(sig, false).verdict === "delete";
 }
 
 /**

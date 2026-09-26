@@ -121,6 +121,7 @@ export function paragraphQuestions(
     string,
     Array<{ key: string; find: string; replace: string }>
   >,
+  askOnTopic = false,
 ): QuestionSet {
   const set = new QuestionSet();
   units.forEach((unit, i) => {
@@ -165,6 +166,23 @@ export function paragraphQuestions(
         `Would deleting ${s} make the next sentence unclear, for example because it refers back with "this" or "these"?`,
       ),
     );
+    if (askOnTopic) {
+      // On a page the reader came to for something, the writer's history is
+      // not what they came for. Without this, "I first published this recipe
+      // in 2013" reads as a specific fact and survives every other signal.
+      set.unit(
+        id,
+        "on_topic",
+        noul(
+          `Does ${s} tell the reader something about the subject of \`title\` itself, rather than about the writer, their history, or their feelings?`,
+          {
+            true: "It describes the subject, or tells the reader how to do something.",
+            false:
+              "It is about the writer, their past, their opinions or their enthusiasm.",
+          },
+        ),
+      );
+    }
     const prev = units[i - 1];
     if (prev) {
       set.unit(
@@ -211,13 +229,28 @@ export function redundancyQuestions(group: Unit[]): QuestionSet {
   );
 }
 
-/** Stage 4: edit check. One request per edited paragraph. */
-export function editCheckQuestions(): QuestionSet {
+/**
+ * Stage 4: edit check. One request per edited paragraph.
+ *
+ * On a goal-directed page the question asks what the reader *needs*, not what
+ * the text contains. Unscoped it reverts every off-topic cut by construction:
+ * dropping "I first published this in 2013" does lose a fact, which is the
+ * whole point of dropping it.
+ *
+ * Scoping it to "the subject" instead does not work — measured on the two
+ * paragraphs this was meant to fix, that wording answered 0.95 and 0.95
+ * against 0.94 for a paragraph that really had lost its oven temperature: no
+ * separation at all, because a publication date is a fact about the recipe.
+ * Asking what the reader needs gives 0.29 and 0.40 against 0.97.
+ */
+export function editCheckQuestions(scopeToReaderGoal = false): QuestionSet {
   return new QuestionSet()
     .page(
       "lost_info",
       noul(
-        "Does `original` contain a fact or claim that `edited` no longer contains?",
+        scopeToReaderGoal
+          ? "Does `original` tell the reader something they need in order to make or use `title`, that `edited` no longer tells them?"
+          : "Does `original` contain a fact or claim that `edited` no longer contains?",
       ),
     )
     .page(

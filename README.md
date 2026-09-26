@@ -32,10 +32,16 @@ npm install
 cp .env.example .env   # add TYPESAFE_API_KEY
 ```
 
-`TYPESAFE_API_KEY` is the only required key. Web mode also wants
+`TYPESAFE_API_KEY` is the only required key. Web mode also needs
 `BROWSERBASE_API_KEY` and `BROWSERBASE_PROJECT_ID` — without them it falls back
 to a plain `fetch`, which most publisher sites refuse with a 403 and which never
 produces a screenshot.
+
+Web mode caches every good fetch under `data/cache/`. The demo button always
+tries live first and replays the cache only if the live call fails or runs past
+`DEMO_BUDGET_MS`; the Original column says **live** or **replay**, so a replay
+is never mistaken for a live load. Bot checks answer with HTTP 200, so they are
+detected by content and never written over a good cache entry.
 
 ```bash
 npm run dev          # server on :8787, web app on :5173
@@ -88,7 +94,7 @@ every paragraph judged in parallel. Three rules from TypeSafe's docs shape it:
 | --- | --- | --- |
 | 0 · router | 1 (pasted input only) | `input_kind` |
 | 1 · page gate | 1, whole text | `genre`, `padding`, `first_substance`, `outro_restates` |
-| 2 · paragraph pass | 1 per paragraph, parallel | `adds_info`, `filler_type`, `generic`, `specific`, `load_bearing`, `repeats_prev`, plus one per phrase-table hit |
+| 2 · paragraph pass | 1 per paragraph, parallel | `adds_info`, `filler_type`, `generic`, `specific`, `load_bearing`, `repeats_prev`, `on_topic`, plus one per phrase-table hit |
 | 3 · redundancy | 1 per group of adjacent repeats | `best` |
 | 4 · edit check | 1 per edited paragraph | `lost_info`, `reads_ok`, `tone_kept` |
 | list | 1 per 20 items | `useful`, `item_type`, `generic`, `specific` |
@@ -98,10 +104,25 @@ Jev knows exactly which one to judge.
 
 ### Edit rules
 
-The planner only cuts when several signals agree. A sentence goes when
-`adds_info` is low, it names nothing concrete, nothing after it depends on it,
-and `filler_type` is confidently not "substantive". Anything short of that is
-flagged rather than cut.
+The planner only cuts when several signals agree, and there are two ways for a
+sentence to go.
+
+**Filler.** All four signals agree: `adds_info` is low, it names nothing
+concrete, nothing after it depends on it, and `filler_type` is confidently not
+"substantive".
+
+**Off topic.** On a page the reader came to for something — a recipe, a how-to,
+documentation — a sentence about the writer rather than the subject goes even
+when it is concrete. This is the rule that clears a recipe blog's life story.
+"I originally published this recipe in 2013" passes every filler test: it
+states a fact, it names a date, Jev calls it substantive. It is still not what
+the reader opened the page for. `load_bearing` still protects the flow, and a
+load-bearing aside is flagged instead of cut.
+
+`on_topic` is only asked for genres where the reader arrived with a goal.
+Email is deliberately excluded: there, the writer is often the point.
+
+Anything short of either rule is flagged rather than cut.
 
 **Never cut:** headings, list items, tables, code blocks and quotes; the
 greeting and sign-off in the email preset; anything at all when the genre is
@@ -118,14 +139,25 @@ Tuning against a slop-heavy email draft moved two questions and no thresholds:
 - Phrases the table deletes were asked whether they could be "replaced with
   nothing", which reads as a trick question. They now ask about removal.
 
+Web mode made the same point twice more. The off-topic rule above exists
+because no threshold could separate a recipe's life story from its method —
+only a new question could. And Stage 4 reverted every one of those cuts until
+its question changed too: asking whether the edit lost "a fact about the
+subject" scored 0.95 on two paragraphs that had lost nothing the reader wanted
+and 0.94 on one that really had dropped its oven temperature. Asking whether
+the reader lost something *they need in order to make the thing* scores 0.29
+and 0.40 against 0.97.
+
 Jev answers the words written, not the intent. That is the single biggest
 lever in this codebase.
 
 ## Cost
 
 At $0.042 per million input tokens with output free, a 230-word email costs
-about $0.0006 — a fraction of a cent, for 113 judgments in under a second. The
-counter in the UI computes this live from each response's token usage.
+about $0.0006 — a fraction of a cent, for 113 judgments in under a second. A
+1,800-word recipe page costs about $0.0015 for 275 judgments across 22
+requests. The counter in the UI computes this live from each response's token
+usage.
 
 ## Layout
 

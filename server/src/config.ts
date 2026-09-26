@@ -11,6 +11,16 @@ export const THRESHOLDS = {
     specific: 0.3,
     loadBearing: 0.5,
     fillerConfidence: 0.6,
+    /**
+     * The off-topic rule, for goal-directed genres only.
+     *
+     * Measured on a recipe blog, `on_topic` splits into two clusters with a
+     * wide empty gap between them: life-story sentences land at 0.08-0.45,
+     * everything about the actual recipe at 0.95-0.97. Sitting in the middle
+     * of that gap catches the whole life story and comes nowhere near a
+     * sentence that tells the reader something.
+     */
+    offTopic: 0.5,
   },
   /** Below this, a sentence Jev is unsure about is flagged rather than cut. */
   flagAddsInfo: 0.5,
@@ -37,6 +47,21 @@ export const THRESHOLDS = {
 
 /** Genres that get flags only. Repetition in these is usually deliberate. */
 export const FLAG_ONLY_GENRES = new Set(["fiction", "poetry", "speech"]);
+
+/**
+ * Genres where the reader arrived with a goal, and a sentence about the
+ * writer's history does not serve it. These get the extra `on_topic` question.
+ *
+ * An email is deliberately absent: there, the writer is often the point.
+ */
+export const GOAL_DIRECTED_GENRES = new Set([
+  "recipe",
+  "how_to_guide",
+  "documentation",
+  "news_or_explainer_article",
+  "product_page",
+  "blog_post",
+]);
 
 /** Jev 1.13: $0.042 per million input tokens, output free. */
 export const USD_PER_INPUT_MTOK = 0.042;
