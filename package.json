@@ -3,14 +3,22 @@
   "private": true,
   "version": "0.1.0",
   "description": "Strips AI slop from anything you read or write. Every judgment is made by Jev; no LLM runs anywhere.",
-  "workspaces": ["server", "web"],
-  "engines": { "node": ">=20" },
+  "workspaces": [
+    "server",
+    "web"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
-    "dev": "npm run dev --workspaces --if-present",
+    "dev": "concurrently -n server,web -c cyan,magenta \"npm:dev:server\" \"npm:dev:web\"",
     "dev:server": "npm run dev -w server",
     "dev:web": "npm run dev -w web",
     "build": "npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test -w server"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.0"
   }
 }
